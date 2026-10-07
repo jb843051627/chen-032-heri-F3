@@ -36,10 +36,30 @@ public class THeriDelRule implements Serializable {
     @ApiModelProperty(value = "凭证代号")
     private String billNo;
 
-    /** 当前关口 0..2 */
+    /** 档(直发档/换单档/改提单档)：开单时按港里判据定死 */
+    @TableField("grade")
+    @ApiModelProperty(value = "档(直发档/换单档/改提单档)")
+    private String grade;
+
+    /** 这一档几道关，册上写死；往后加关口不追老账 */
+    @TableField("gate_total")
+    @ApiModelProperty(value = "这一档几道关")
+    private Integer gateTotal;
+
+    /** 第几趟(收口重来递增，头趟1) */
+    @TableField("round_no")
+    @ApiModelProperty(value = "第几趟")
+    private Integer roundNo;
+
+    /** 已落成关数(0..gate_total)，下一道待签=node_no+1；关齐即封口 */
     @TableField("node_no")
-    @ApiModelProperty(value = "当前关口 0..2")
+    @ApiModelProperty(value = "已落成关数")
     private Integer nodeNo;
+
+    /** 退了几回 */
+    @TableField("rollback_cnt")
+    @ApiModelProperty(value = "退了几回")
+    private Integer rollbackCnt;
 
     /** 落签模式 0或签 1齐签 */
     @TableField("sign_mode")
@@ -56,7 +76,7 @@ public class THeriDelRule implements Serializable {
     @ApiModelProperty(value = "本关口已落人数")
     private Integer signCount;
 
-    /** 凭证状态 0在办 1已核发 2已封住 */
+    /** 凭证状态 0在办 1已核发(关齐封口) 2已封住(收口重来的老趟) */
     @TableField("status")
     @ApiModelProperty(value = "凭证状态 0在办 1已核发 2已封住")
     private Integer status;
@@ -107,6 +127,38 @@ public class THeriDelRule implements Serializable {
 
     public void setBillNo(String billNo) {
         this.billNo = billNo;
+    }
+
+    public String getGrade() {
+        return grade;
+    }
+
+    public void setGrade(String grade) {
+        this.grade = grade;
+    }
+
+    public Integer getGateTotal() {
+        return gateTotal;
+    }
+
+    public void setGateTotal(Integer gateTotal) {
+        this.gateTotal = gateTotal;
+    }
+
+    public Integer getRoundNo() {
+        return roundNo;
+    }
+
+    public void setRoundNo(Integer roundNo) {
+        this.roundNo = roundNo;
+    }
+
+    public Integer getRollbackCnt() {
+        return rollbackCnt;
+    }
+
+    public void setRollbackCnt(Integer rollbackCnt) {
+        this.rollbackCnt = rollbackCnt;
     }
 
     public Integer getNodeNo() {

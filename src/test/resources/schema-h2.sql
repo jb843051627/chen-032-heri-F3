@@ -55,6 +55,54 @@ CREATE TABLE IF NOT EXISTS t_heri_job_row (
   CONSTRAINT uk_job_row UNIQUE (job_no, row_no)
 );
 
+CREATE TABLE IF NOT EXISTS t_heri_del_rule (
+  id BIGINT NOT NULL,
+  bill_no VARCHAR(64),
+  grade VARCHAR(16),
+  gate_total INT,
+  round_no INT DEFAULT 1,
+  node_no INT DEFAULT 0,
+  rollback_cnt INT DEFAULT 0,
+  sign_mode INT,
+  need_count INT,
+  sign_count INT,
+  status INT,
+  del_flag INT DEFAULT 0,
+  create_by VARCHAR(64),
+  create_time DATETIME,
+  update_by VARCHAR(64),
+  update_time DATETIME,
+  remark VARCHAR(500),
+  PRIMARY KEY (id)
+);
+
+-- 放货签认册：一道只容一笔有效（uk 只卡 eff_gate，作废/被拒=NULL 不占位）；
+-- 同一笔重办不重复落（uk attempt）。
+CREATE TABLE IF NOT EXISTS t_heri_del_sign (
+  id BIGINT NOT NULL,
+  bill_no VARCHAR(64),
+  round_no INT,
+  gate_no INT,
+  signer VARCHAR(64),
+  action VARCHAR(32),
+  signed_at DATETIME,
+  attempt_id VARCHAR(64),
+  status INT,
+  void_reason VARCHAR(64),
+  reject_reason VARCHAR(128),
+  supersedes BIGINT,
+  eff_gate INT,
+  del_flag INT DEFAULT 0,
+  create_by VARCHAR(64),
+  create_time DATETIME,
+  update_by VARCHAR(64),
+  update_time DATETIME,
+  remark VARCHAR(500),
+  PRIMARY KEY (id),
+  CONSTRAINT uk_del_sign_eff UNIQUE (bill_no, round_no, eff_gate),
+  CONSTRAINT uk_del_sign_attempt UNIQUE (bill_no, round_no, attempt_id)
+);
+
 CREATE TABLE IF NOT EXISTS t_heri_del_row (
   id BIGINT NOT NULL,
   item_no VARCHAR(64),

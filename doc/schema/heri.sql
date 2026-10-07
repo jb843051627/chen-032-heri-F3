@@ -97,11 +97,15 @@ CREATE TABLE IF NOT EXISTS t_heri_del_row (
 CREATE TABLE IF NOT EXISTS t_heri_del_rule (
   id bigint NOT NULL COMMENT '主键',
   bill_no varchar(64) DEFAULT NULL COMMENT '凭证代号',
-  node_no int DEFAULT NULL COMMENT '当前关口 0..2',
+  grade varchar(16) DEFAULT NULL COMMENT '档(直发档/换单档/改提单档)：开单时按港里判据定死，系统不自己挑',
+  gate_total int DEFAULT NULL COMMENT '这一档几道关，册上写死；往后加关口不许追着改老账',
+  round_no int DEFAULT '1' COMMENT '第几趟(收口重来递增，头趟1)；老趟一条不动，照旧查得回',
+  node_no int DEFAULT '0' COMMENT '已落成关数(0..gate_total)，下一道待签=node_no+1；关齐即封口',
+  rollback_cnt int DEFAULT '0' COMMENT '退了几回(回退一次记一回，留痕对得上)',
   sign_mode int DEFAULT NULL COMMENT '落签模式 0或签 1齐签',
   need_count int DEFAULT NULL COMMENT '本关口应落人数',
   sign_count int DEFAULT NULL COMMENT '本关口已落人数',
-  status int DEFAULT NULL COMMENT '凭证状态 0在办 1已核发 2已封住',
+  status int DEFAULT NULL COMMENT '凭证状态 0在办 1已核发(关齐封口) 2已封住(收口重来的老趟)',
   del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
   create_by varchar(64) DEFAULT NULL COMMENT '创建者',
   create_time datetime DEFAULT NULL COMMENT '创建时间',
@@ -110,6 +114,34 @@ CREATE TABLE IF NOT EXISTS t_heri_del_rule (
   remark varchar(500) DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='放货凭证核发判定规则';
+
+-- 放货签认册：关口每一笔都落这册——有效、作废、被拒的笔都留着，不许悄悄抹掉。
+-- 一道只容一笔有效：eff_gate 有效时=关次、否则 NULL，唯一键只卡有效笔。
+-- 签认册与留痕册(t_sys_oper_log)同一事务落，不能只落一处。
+CREATE TABLE IF NOT EXISTS t_heri_del_sign (
+  id bigint NOT NULL COMMENT '主键',
+  bill_no varchar(64) DEFAULT NULL COMMENT '凭证代号',
+  round_no int DEFAULT NULL COMMENT '第几趟(与凭证头一致)',
+  gate_no int DEFAULT NULL COMMENT '关次(系统从上往下排，不许手填)',
+  signer varchar(64) DEFAULT NULL COMMENT '谁落的',
+  action varchar(32) DEFAULT NULL COMMENT '关口动作(受理/单证齐全/结关)',
+  signed_at datetime DEFAULT NULL COMMENT '落笔时刻(册上记的何时)',
+  attempt_id varchar(64) DEFAULT NULL COMMENT '落笔幂等号(中途出错重办，只补没写的那几步)',
+  status int DEFAULT NULL COMMENT '这笔算不算数 0有效 1作废 2被拒',
+  void_reason varchar(64) DEFAULT NULL COMMENT '作废缘由(被后一笔压下/抢签落败/回退冲下)',
+  reject_reason varchar(128) DEFAULT NULL COMMENT '被拒缘由(多了一道以册上为准/已封口/老趟不动)',
+  supersedes bigint DEFAULT NULL COMMENT '压了哪一笔(签认册主键，后一笔压前一笔时指回去)',
+  eff_gate int DEFAULT NULL COMMENT '有效时=关次，否则NULL；一道只容一笔有效',
+  del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
+  create_by varchar(64) DEFAULT NULL COMMENT '创建者',
+  create_time datetime DEFAULT NULL COMMENT '创建时间',
+  update_by varchar(64) DEFAULT NULL COMMENT '更新者',
+  update_time datetime DEFAULT NULL COMMENT '更新时间',
+  remark varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_del_sign_eff (bill_no, round_no, eff_gate) COMMENT '一道只容一笔有效(作废/被拒=NULL不占位)',
+  UNIQUE KEY uk_del_sign_attempt (bill_no, round_no, attempt_id) COMMENT '同一笔重办不重复落'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='放货签认册';
 
 CREATE TABLE IF NOT EXISTS t_heri_job (
   id bigint NOT NULL COMMENT '主键',
@@ -256,9 +288,9 @@ VALUES (0, 'NR00', '签发直发档：本航次 500 件以内直发出单（示�
        (1, 'NR01', '签发直发档：本航次 500 件以内直发出单（在用行）', 500.00, 2000.00, 5000.00, '2020-01-01 00:00:00', '2099-12-31 23:59:59', 10, 0, 0, 'seed', NOW()),
        (2, 'NR02', '签发撤下档：本航次 500 件以内直发出单（停用行）', 500.00, 2000.00, 5000.00, '2020-01-01 00:00:00', '2021-12-31 23:59:59', 10, 1, 0, 'seed', NOW());
 
-INSERT IGNORE INTO t_heri_del_rule (id, bill_no, node_no, sign_mode, need_count, sign_count, status, del_flag, create_by, create_time)
-VALUES (0, 'NB00', 0, 0, 1, 0, 0, 0, 'seed', NOW()),
-       (1, 'NB01', 1, 1, 2, 0, 0, 0, 'seed', NOW());
+INSERT IGNORE INTO t_heri_del_rule (id, bill_no, grade, gate_total, round_no, node_no, rollback_cnt, sign_mode, need_count, sign_count, status, del_flag, create_by, create_time)
+VALUES (0, 'NB00', '直发档', 3, 1, 0, 0, 0, 1, 0, 0, 0, 'seed', NOW()),
+       (1, 'NB01', '直发档', 3, 1, 1, 0, 1, 2, 0, 0, 0, 'seed', NOW());
 
 INSERT IGNORE INTO t_heri_adv_base (id, grade_code, grade_name, th1_max, th2_max, th3_max, status, del_flag, create_by, create_time)
 VALUES (0, 'GB00', '处置直改档：改单金额在 500 元以内（示例行）', 500.00, 2000.00, 5000.00, 0, 0, 'seed', NOW()),
