@@ -188,3 +188,72 @@ CREATE TABLE IF NOT EXISTS t_heri_bl_rule (
   remark VARCHAR(500),
   PRIMARY KEY (id)
 );
+
+CREATE TABLE IF NOT EXISTS t_heri_del_grade (
+  id BIGINT NOT NULL,
+  grade_code VARCHAR(32),
+  grade_name VARCHAR(64),
+  biz_mode VARCHAR(32),
+  qty_min DECIMAL(14,2),
+  qty_max DECIMAL(14,2),
+  gates INT,
+  priority INT DEFAULT 0,
+  status INT DEFAULT 0,
+  del_flag INT DEFAULT 0,
+  create_by VARCHAR(64),
+  create_time DATETIME,
+  update_by VARCHAR(64),
+  update_time DATETIME,
+  remark VARCHAR(500),
+  PRIMARY KEY (id),
+  CONSTRAINT uk_del_grade_code UNIQUE (grade_code)
+);
+
+CREATE TABLE IF NOT EXISTS t_heri_del_bill (
+  id BIGINT NOT NULL,
+  bill_no VARCHAR(40),
+  grade_code VARCHAR(32),
+  grade_name VARCHAR(64),
+  biz_mode VARCHAR(32),
+  qty DECIMAL(14,2),
+  gate_count INT,
+  round_no INT DEFAULT 1,
+  final_round_no INT,
+  status INT DEFAULT 0,
+  cur_gate INT DEFAULT 1,
+  rollback_cnt INT DEFAULT 0,
+  sealed_time DATETIME,
+  del_flag INT DEFAULT 0,
+  create_by VARCHAR(64),
+  create_time DATETIME,
+  update_by VARCHAR(64),
+  update_time DATETIME,
+  remark VARCHAR(500),
+  PRIMARY KEY (id),
+  CONSTRAINT uk_del_bill_no UNIQUE (bill_no)
+);
+
+CREATE TABLE IF NOT EXISTS t_heri_del_gate (
+  id BIGINT NOT NULL,
+  bill_no VARCHAR(40),
+  round_no INT,
+  gate_no INT,
+  gate_total INT,
+  signer VARCHAR(64),
+  sign_action VARCHAR(64),
+  land_time DATETIME,
+  land_seq BIGINT,
+  status INT,
+  trail_ok INT DEFAULT 0,
+  void_reason VARCHAR(255),
+  superseded_by BIGINT,
+  del_flag INT DEFAULT 0,
+  create_by VARCHAR(64),
+  create_time DATETIME,
+  update_by VARCHAR(64),
+  update_time DATETIME,
+  remark VARCHAR(500),
+  PRIMARY KEY (id)
+);
+
+CREATE INDEX idx_del_gate_bill ON t_heri_del_gate (bill_no, round_no, gate_no);

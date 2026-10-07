@@ -272,3 +272,91 @@ VALUES (1, '20GP', '20 尺普通箱', 0, 0, 'seed', NOW()),
        (3, '40HQ', '40 尺高箱', 0, 0, 'seed', NOW()),
        (4, '45HQ', '45 尺高箱(已撤)', 1, 0, 'seed', NOW());
 
+
+-- ============================================================================
+-- 放货台：一票货过几道关，归哪一档、册上写几道，全照港里判据来。
+-- 分档看数量：直发档当场放；换单档先换单；改提单档交上去核。
+-- 判据没写到的数量，退回重定，系统不自己挑。
+-- ============================================================================
+
+-- 放货分档判据（港里的判据）：数量落在 [qty_min, qty_max) 内归这一档；
+-- gates 写死这一档几道关——说三道走三道，说两道走两道。
+-- 判据只对立册那一刻负责：立册时几道关誊到单册头上，往后改判据/加关口不追老账。
+CREATE TABLE IF NOT EXISTS t_heri_del_grade (
+  id bigint NOT NULL COMMENT '主键',
+  grade_code varchar(32) DEFAULT NULL COMMENT '分档编号',
+  grade_name varchar(64) DEFAULT NULL COMMENT '分档名称(直发档/换单档/改提单档)',
+  biz_mode varchar(32) DEFAULT NULL COMMENT '放法 直发=当场放 换单=先换单 改提=交上去核',
+  qty_min decimal(14,2) DEFAULT NULL COMMENT '数量下限(含)',
+  qty_max decimal(14,2) DEFAULT NULL COMMENT '数量上限(不含，空=不封顶)',
+  gates int DEFAULT NULL COMMENT '本档几道关(册上写死)',
+  priority int DEFAULT '0' COMMENT '优先级(大数先挑)',
+  status int DEFAULT '0' COMMENT '状态 0启用 1撤下',
+  del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
+  create_by varchar(64) DEFAULT NULL COMMENT '创建者',
+  create_time datetime DEFAULT NULL COMMENT '创建时间',
+  update_by varchar(64) DEFAULT NULL COMMENT '更新者',
+  update_time datetime DEFAULT NULL COMMENT '更新时间',
+  remark varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_del_grade_code (grade_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='放货分档判据';
+
+-- 放货单册（一票一册）：归哪一档、几道关、以哪一遍为准，立册时写死在头上。
+-- gate_count 是判据的誊本：往后判据加关口，老册子照旧走原来的道。
+CREATE TABLE IF NOT EXISTS t_heri_del_bill (
+  id bigint NOT NULL COMMENT '主键',
+  bill_no varchar(40) DEFAULT NULL COMMENT '放货单号(册号，一票一号)',
+  grade_code varchar(32) DEFAULT NULL COMMENT '分档编号(立册写死)',
+  grade_name varchar(64) DEFAULT NULL COMMENT '分档名称(立册写死)',
+  biz_mode varchar(32) DEFAULT NULL COMMENT '放法(立册写死)',
+  qty decimal(14,2) DEFAULT NULL COMMENT '数量(分档只看它)',
+  gate_count int DEFAULT NULL COMMENT '册上几道关(立册誊死，不随后续判据改)',
+  round_no int DEFAULT '1' COMMENT '当前走到第几遍(收口重来才递增)',
+  final_round_no int DEFAULT NULL COMMENT '最后定住的是哪一遍(以这一遍为准)',
+  status int DEFAULT '0' COMMENT '册子状态 0在办 1已封住(关齐即封)',
+  cur_gate int DEFAULT '1' COMMENT '当前关次(系统从上往下排，不许手填)',
+  rollback_cnt int DEFAULT '0' COMMENT '退过几回',
+  sealed_time datetime DEFAULT NULL COMMENT '封口时刻',
+  del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
+  create_by varchar(64) DEFAULT NULL COMMENT '创建者',
+  create_time datetime DEFAULT NULL COMMENT '创建时间',
+  update_by varchar(64) DEFAULT NULL COMMENT '更新者',
+  update_time datetime DEFAULT NULL COMMENT '更新时间',
+  remark varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_del_bill_no (bill_no) COMMENT '单号唯一，同号再立只照面'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='放货单册';
+
+-- 关口落签流水：append-only，一笔一道痕，作废也留着，谁都不许悄悄抹。
+-- 同一关只容一笔有效：非末道悬着时后落笔压前笔(09:40/09:41)；
+-- 真同时抢签，先落的算数、后到的作废记账；末道首签即封口，之后全是封口后加签。
+CREATE TABLE IF NOT EXISTS t_heri_del_gate (
+  id bigint NOT NULL COMMENT '主键',
+  bill_no varchar(40) DEFAULT NULL COMMENT '放货单号',
+  round_no int DEFAULT NULL COMMENT '第几遍',
+  gate_no int DEFAULT NULL COMMENT '关次(系统按册从上往下排)',
+  gate_total int DEFAULT NULL COMMENT '册上共几道(落签那一刻的誊本)',
+  signer varchar(64) DEFAULT NULL COMMENT '谁落的笔',
+  sign_action varchar(64) DEFAULT NULL COMMENT '落签动作(受理/单证齐全/结关)',
+  land_time datetime DEFAULT NULL COMMENT '何时落的',
+  land_seq bigint DEFAULT NULL COMMENT '落笔全局次序(同时刻抢签拿它分先后)',
+  status int DEFAULT NULL COMMENT '1有效 2作废(后落笔压) 3作废(抢签后到) 4作废(封口后加签) 5作废(关次对不上) 6作废(跨步) 7回退摆回',
+  trail_ok int DEFAULT '0' COMMENT '留痕是否已同次落齐 0半成品 1齐(只落一处不算数)',
+  void_reason varchar(255) DEFAULT NULL COMMENT '作废/摆回缘由',
+  superseded_by bigint DEFAULT NULL COMMENT '被哪一笔压掉',
+  del_flag int DEFAULT '0' COMMENT '删除标记 恒0(流水只许追加)',
+  create_by varchar(64) DEFAULT NULL COMMENT '创建者',
+  create_time datetime DEFAULT NULL COMMENT '创建时间',
+  update_by varchar(64) DEFAULT NULL COMMENT '更新者',
+  update_time datetime DEFAULT NULL COMMENT '更新时间',
+  remark varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (id),
+  KEY idx_del_gate_bill (bill_no, round_no, gate_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='放货关口落签流水';
+
+-- 放货分档判据种子：数量决定档，档决定道；1000 件往上判据没写，立册即退回重定。
+INSERT IGNORE INTO t_heri_del_grade (id, grade_code, grade_name, biz_mode, qty_min, qty_max, gates, priority, status, del_flag, create_by, create_time)
+VALUES (1, 'DG01', '直发档', '直发', 0.00, 50.00, 3, 10, 0, 0, 'seed', NOW()),
+       (2, 'DG02', '换单档', '换单', 50.00, 200.00, 2, 10, 0, 0, 'seed', NOW()),
+       (3, 'DG03', '改提单档', '改提', 200.00, 1000.00, 3, 10, 0, 0, 'seed', NOW());
